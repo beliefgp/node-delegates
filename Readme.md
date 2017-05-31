@@ -1,88 +1,110 @@
 
-# delegates
+# delegates2
 
   Node method and accessor delegation utilty.
 
 ## Installation
 
 ```
-$ npm install delegates
+$ npm install delegates2
 ```
 
 ## Example
 
 ```js
-var delegate = require('delegates');
+var delegator = require('delegates2');
 
 ...
-
-delegate(proto, 'request')
-  .method('acceptsLanguages')
-  .method('acceptsEncodings')
-  .method('acceptsCharsets')
-  .method('accepts')
+delegator
+  .delegate(proto, 'request')
+  .method('acceptsLanguages', 'languages')
   .method('is')
-  .access('querystring')
-  .access('idempotent')
-  .access('socket')
-  .access('length')
-  .access('query')
-  .access('search')
-  .access('status')
-  .access('method')
-  .access('path')
-  .access('body')
-  .access('host')
   .access('url')
-  .getter('subdomains')
-  .getter('protocol')
-  .getter('header')
-  .getter('stale')
-  .getter('fresh')
-  .getter('secure')
-  .getter('ips')
+  .access('querystring', 'qs')
   .getter('ip')
 ```
 
 # API
 
-## Delegate(proto, prop)
+## new Delegate(proto, prop)
 
 Creates a delegator instance used to configure using the `prop` on the given
-`proto` object. (which is usually a prototype)
+`proto` object. (which is usually a prototype).
 
-## Delegate.auto(proto, targetProto, targetProp)
+`prop` support multi level string and object.
 
-Delegates getters, setters, values, and methods from targetProto to proto.
-Assumes that targetProto objects will exist under proto objects with the key targetProp.
+```js
+const obj = {
+  request: {
+    url: {
+      query: function(){
+        return this === obj.request.url;
+      }
+    }
+  }
+};
+const source = {
+  response: {
+    header: {
+      type: function(){
+        return this === source.response.header;
+      }
+    }
+  }
+};
 
-## Delegate#method(name)
+delegator
+  .delegate(obj, 'request.url')
 
-Allows the given method `name` to be accessed on the host.
+delegator
+  .delegate(obj, source.response)
 
-## Delegate#getter(name)
+```
+
+## Delegate.delegate(proto, target)
+
+Delegates getters, setters, values, and methods from target to proto.
+
+## Delegate.auto(proto, target)
+
+Delegates all getters, setters, values, and methods from target to proto.
+
+## Delegate#method(name[, targetName])
+
+Allows the given method `name` to be accessed on the host.    
+You can set the `targetName`, specitying then method name, default `name`. 
+
+```js
+delegator
+  .delegate(obj, 'request.url')
+  .method('query', 'qs');
+
+obj.qs() // true
+```
+
+## Delegate#getter(name[, targetName])
 
 Creates a "getter" for the property with the given `name` on the delegated
 object.
 
-## Delegate#setter(name)
+## Delegate#setter(name[, targetName])
 
 Creates a "setter" for the property with the given `name` on the delegated
 object.
 
-## Delegate#access(name)
+## Delegate#access(name[, targetName])
 
 Creates an "accessor" (ie: both getter *and* setter) for the property with the
 given `name` on the delegated object.
 
-## Delegate#fluent(name)
+## Delegate#fluent(name[, targetName])
 
 A unique type of "accessor" that works for a "fluent" API. When called as a
 getter, the method returns the expected value. However, if the method is called
 with a value, it will return itself so it can be chained. For example:
 
 ```js
-delegate(proto, 'request')
+delegate(proto, 'request.url')
   .fluent('query')
 
 // getter

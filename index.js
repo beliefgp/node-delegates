@@ -1,9 +1,4 @@
-
-/**
- * Expose `Delegator`.
- */
-
-module.exports = Delegator;
+'use strict';
 
 /**
  * Initialize a delegator.
@@ -12,146 +7,188 @@ module.exports = Delegator;
  * @param {String} target
  * @api public
  */
+module.exports = class Delegator {
+  constructor(proto, target) {
+    this.proto = proto;
+    this.sourceTarget = target;
+    this.methods = [];
+    this.getters = [];
+    this.setters = [];
+    this.fluents = [];
 
-function Delegator(proto, target) {
-  if (!(this instanceof Delegator)) return new Delegator(proto, target);
-  this.proto = proto;
-  this.target = target;
-  this.methods = [];
-  this.getters = [];
-  this.setters = [];
-  this.fluents = [];
-}
+    // inspect target exist
+    this.target;
+  }
 
-/**
- * Automatically delegate properties
- * from a target prototype
- *
- * @param {Object} proto
- * @param {object} targetProto
- * @param {String} targetProp
- * @api public
- */
-
-Delegator.auto = function(proto, targetProto, targetProp){
-  var delegator = Delegator(proto, targetProp);
-  var properties = Object.getOwnPropertyNames(targetProto);
-  for (var i = 0; i < properties.length; i++) {
-    var property = properties[i];
-    var descriptor = Object.getOwnPropertyDescriptor(targetProto, property);
-    if (descriptor.get) {
-      delegator.getter(property);
+  // To prevent the pointer changes
+  get target() {
+    let target;
+    if (typeof this.sourceTarget === 'string') {
+      const [ tObj, tName ] = name2Obj(this.proto, this.sourceTarget);
+      target = tObj[tName];
+    } else {
+      target = this.sourceTarget;
     }
-    if (descriptor.set) {
-      delegator.setter(property);
+
+    if(!isObject(target)) {
+      throw new Error('target is not an object');
     }
-    if (descriptor.hasOwnProperty('value')) { // could be undefined but writable
-      var value = descriptor.value;
-      if (value instanceof Function) {
-        delegator.method(property);
+
+    return target;
+  }
+
+  /**
+   * Delegate method `name`.
+   *
+   * @param {String} name
+   * @param {String} targetName
+   * @return {Delegator} self
+   * @api public
+   */
+  method(name, targetName) {
+    targetName = targetName || name;
+    this.methods.push(targetName);
+
+    const [ proto, pName ] = name2Obj(this.proto, targetName, true);
+
+    proto[pName] = (...args) => {
+      const [ target, tName] = name2Obj(this.target, name);
+      return target[tName].apply(target, args);
+    };
+    
+    return this;
+  }
+
+  /**
+   * Delegator getter `name`.
+   *
+   * @param {String} name
+  *  @param {String} targetName
+   * @return {Delegator} self
+   * @api public
+   */
+  getter(name, targetName) {
+    targetName = targetName || name;
+    this.getters.push(targetName);
+
+    const [ proto, pName ] = name2Obj(this.proto, targetName, true);
+
+    proto.__defineGetter__(pName, () => {
+      const [ target, tName] = name2Obj(this.target, name);
+      return target[tName];
+    });
+
+    return this;
+  }
+
+  setter(name, targetName){
+    targetName = targetName || name;
+    this.setters.push(targetName);
+
+    const [ proto, pName ] = name2Obj(this.proto, targetName, true);
+
+    proto.__defineSetter__(pName, (val) => {
+      const [ target, tName] = name2Obj(this.target, name);
+      return target[tName] = val;
+    });
+
+    return this;
+  }
+
+  /**
+   * Delegator accessor `name`.
+   *
+   * @param {String} name
+   * @param {String} targetName
+   * @return {Delegator} self
+   * @api public
+   */
+  access(name, targetName) {
+    return this.getter(name, targetName).setter(name, targetName);
+  }
+
+  /**
+   * Delegator fluent accessor
+   *
+   * @param {String} name
+   * @param {String} targetName
+   * @return {Delegator} self
+   * @api public
+   */
+  fluent (name, targetName) {
+    targetName = targetName || name;
+    this.fluents.push(targetName);
+
+    const [ proto, pName ] = name2Obj(this.proto, targetName, true);
+
+    proto[pName] = (val) => {
+      const [ target, tName] = name2Obj(this.target, name);
+      if ('undefined' != typeof val) {
+        target[tName] = val;
+        return proto;
       } else {
+        return target[tName];
+      }
+    };
+
+    return this;
+  }
+
+  static delegate(...args) {
+    return new this(...args);
+  }
+
+  /**
+   * Automatically delegate properties
+   * from a target prototype
+   *
+   * @param {Object} proto
+   * @param {object} target
+   * @api public
+   */
+  static auto(proto, target) {
+    const delegator = new this(proto, target);
+    const properties = Object.getOwnPropertyNames(delegator.target);
+    for (const property of properties) {
+      const descriptor = Object.getOwnPropertyDescriptor(delegator.target, property);
+      if (descriptor.get) {
         delegator.getter(property);
       }
-      if (descriptor.writable) {
+      if (descriptor.set) {
         delegator.setter(property);
       }
+      if (descriptor.hasOwnProperty('value')) { // could be undefined but writable
+        const value = descriptor.value;
+        if (value instanceof Function) {
+          delegator.method(property);
+        } else {
+          delegator.getter(property);
+        }
+        if (descriptor.writable) {
+          delegator.setter(property);
+        }
+      }
     }
-  }
+  } 
 };
 
-/**
- * Delegate method `name`.
- *
- * @param {String} name
- * @return {Delegator} self
- * @api public
- */
+function name2Obj(proto, name, autoPad) {
+  let names = name.split('.');
+  let lastPropName = names.pop();
+  let target = proto;
 
-Delegator.prototype.method = function(name){
-  var proto = this.proto;
-  var target = this.target;
-  this.methods.push(name);
-
-  proto[name] = function(){
-    return this[target][name].apply(this[target], arguments);
-  };
-
-  return this;
-};
-
-/**
- * Delegator accessor `name`.
- *
- * @param {String} name
- * @return {Delegator} self
- * @api public
- */
-
-Delegator.prototype.access = function(name){
-  return this.getter(name).setter(name);
-};
-
-/**
- * Delegator getter `name`.
- *
- * @param {String} name
- * @return {Delegator} self
- * @api public
- */
-
-Delegator.prototype.getter = function(name){
-  var proto = this.proto;
-  var target = this.target;
-  this.getters.push(name);
-
-  proto.__defineGetter__(name, function(){
-    return this[target][name];
-  });
-
-  return this;
-};
-
-/**
- * Delegator setter `name`.
- *
- * @param {String} name
- * @return {Delegator} self
- * @api public
- */
-
-Delegator.prototype.setter = function(name){
-  var proto = this.proto;
-  var target = this.target;
-  this.setters.push(name);
-
-  proto.__defineSetter__(name, function(val){
-    return this[target][name] = val;
-  });
-
-  return this;
-};
-
-/**
- * Delegator fluent accessor
- *
- * @param {String} name
- * @return {Delegator} self
- * @api public
- */
-
-Delegator.prototype.fluent = function (name) {
-  var proto = this.proto;
-  var target = this.target;
-  this.fluents.push(name);
-
-  proto[name] = function(val){
-    if ('undefined' != typeof val) {
-      this[target][name] = val;
-      return this;
-    } else {
-      return this[target][name];
+  names.reduce((prop, propName, index) => {
+    // not auto padding obj and not find property throw error
+    if(!autoPad && !isObject(prop[propName])){
+      throw new Error(`property [${names.slice(0, index + 1).join('.')}] is not an object`);
     }
-  };
 
-  return this;
-};
+    return prop[propName] = target = prop[propName] || {};
+  }, target);
+
+  return [target, lastPropName];
+}
+
+function isObject(obj){
+  return typeof obj === 'object' && obj !== null;
+}

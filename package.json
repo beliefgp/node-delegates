@@ -1,9 +1,12 @@
 {
-  "name": "delegates",
+  "name": "delegates2",
   "version": "1.0.0",
-  "repository": "visionmedia/node-delegates",
+  "repository": "https://github.com/beliefgp/node-delegates2",
   "description": "delegate methods and accessors to another property",
-  "keywords": ["delegate", "delegation"],
+  "keywords": ["delegate2", "delegation"],
+  "scripts": {
+    "test": "mocha ./test/index.js"
+  },
   "dependencies": {},
   "devDependencies": {
     "mocha": "*",
